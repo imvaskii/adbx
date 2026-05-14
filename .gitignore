@@ -1,0 +1,8 @@
+
+/bin/
+docs/
+
+/vendor
+.env
+
+.DS_Store
