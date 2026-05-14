@@ -27,6 +27,7 @@ const (
 	stateList
 	stateAwaitingPairing // connect failed with NeedsPairing; watching for pairing mode
 	statePairing
+	stateConnecting // pair succeeded; waiting for connect-mode mDNS entry
 	stateResult
 )
 
@@ -76,6 +77,7 @@ type Model struct {
 	list            listModel
 	awaitingPairing awaitingPairingModel
 	pairing         pairingModel
+	connecting      connectingModel
 	result          resultModel
 }
 
@@ -89,6 +91,8 @@ func (s state) String() string {
 		return "awaitingPairing"
 	case statePairing:
 		return "pairing"
+	case stateConnecting:
+		return "connecting"
 	case stateResult:
 		return "result"
 	default:
@@ -194,8 +198,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.transition(stateResult)
 			return m, nil
 		}
-		// Pair succeeded — scan for the connect-mode mDNS entry (new port).
-		return m, m.scanForConnectCmd(msg.device)
+		// Pair succeeded — show connecting screen while we scan for the new port.
+		m.connecting = newConnectingModel()
+		m.transition(stateConnecting)
+		return m, tea.Batch(m.connecting.Init(), m.scanForConnectCmd(msg.device))
 
 	case connectAddrFoundMsg:
 		if msg.device == nil {
@@ -277,6 +283,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, cmd
 
+	case stateConnecting:
+		nm, cmd := m.connecting.Update(msg)
+		m.connecting = nm.(connectingModel)
+		return m, cmd
+
 	case stateResult:
 		nm, cmd := m.result.Update(msg)
 		m.result = nm.(resultModel)
@@ -297,6 +308,8 @@ func (m Model) View() string {
 		content = m.awaitingPairing.View()
 	case statePairing:
 		content = m.pairing.View()
+	case stateConnecting:
+		content = m.connecting.View()
 	case stateResult:
 		content = m.result.View()
 	}

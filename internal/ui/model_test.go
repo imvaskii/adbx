@@ -326,6 +326,42 @@ func TestPairThenConnect_AutoConnect_ShowsResult(t *testing.T) {
 	}
 }
 
+// ---- B5b: pairDoneMsg transitions to stateConnecting, not stateResult --------
+
+func TestPairDone_Success_TransitionsToConnecting(t *testing.T) {
+	dev := makePairingDevice()
+	m := New()
+	m = update(m, scanDoneMsg{devices: []discovery.Device{dev}})
+	m = update(m, needsPairingMsg{device: &m.list.devices[0]})
+	m = update(m, pairingDeviceFoundMsg{device: dev})
+	m = update(m, pairDoneMsg{result: adb.Result{Success: true}, device: &dev})
+	if m.state != stateConnecting {
+		t.Fatalf("expected stateConnecting after successful pair, got %v", m.state)
+	}
+}
+
+// connectAddrFoundMsg while in stateConnecting should trigger connectCmd and
+// eventually reach stateResult.
+func TestConnecting_AddrFound_TransitionsToResult(t *testing.T) {
+	dev := makePairingDevice()
+	connectDev := discovery.Device{
+		Name: dev.Name,
+		IP:   dev.IP,
+		Port: 45000,
+		Type: discovery.DeviceConnect,
+	}
+	m := newWithDeps(&fakeConnector{connectResult: adb.Result{Success: true, Message: "connected"}}, &fakeScanner{})
+	m = update(m, scanDoneMsg{devices: []discovery.Device{dev}})
+	m = update(m, needsPairingMsg{device: &m.list.devices[0]})
+	m = update(m, pairingDeviceFoundMsg{device: dev})
+	m = update(m, pairDoneMsg{result: adb.Result{Success: true}, device: &dev})
+	// connectAddrFoundMsg arrives — should connectCmd and then reach stateResult.
+	m = updateWithCmd(m, connectAddrFoundMsg{device: &connectDev})
+	if m.state != stateResult {
+		t.Fatalf("expected stateResult after connectAddrFoundMsg, got %v", m.state)
+	}
+}
+
 // ---- B6: fallback rescan message shown when ScanForConnect times out ---------
 
 func TestPairThenConnect_Fallback_ShowsResult(t *testing.T) {

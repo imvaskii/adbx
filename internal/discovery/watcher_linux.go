@@ -57,32 +57,58 @@ func watchForPairing(ctx context.Context, targetIP net.IP) <-chan Device {
 // scanForConnect does a short targeted browse for _adb-tls-connect._tcp
 // entries matching targetIP using avahi-browse. Returns the first match
 // or nil if ctx expires first.
+//
+// Strategy: try the avahi cache first (-c flag, exits immediately after
+// dumping cached entries). This returns in <100ms when the entry is already
+// known. If the cache misses, fall back to an open-ended browse which blocks
+// until the device re-advertises or ctx expires.
 func scanForConnect(ctx context.Context, targetIP net.IP) *Device {
 	adbxlog.Info("discovery: scanForConnect started", "targetIP", targetIP)
-	cmd := exec.CommandContext(ctx, "avahi-browse", "-r", "-p", serviceConnect)
+
+	// Fast path: check avahi's local cache first.
+	if dev := avahiBrowseOnce(ctx, targetIP, "-c"); dev != nil {
+		adbxlog.Info("discovery: scanForConnect found in cache", "ip", dev.IP, "port", dev.Port)
+		return dev
+	}
+
+	// Slow path: open-ended browse until ctx expires.
+	adbxlog.Info("discovery: scanForConnect cache miss, starting open browse")
+	return avahiBrowseOnce(ctx, targetIP, "")
+}
+
+// avahiBrowseOnce runs avahi-browse -r -p [extraFlag] _adb-tls-connect._tcp
+// and returns the first entry matching targetIP, or nil if the process exits
+// or ctx is cancelled before a match is found.
+// extraFlag is passed as an additional argument when non-empty (e.g. "-c").
+func avahiBrowseOnce(ctx context.Context, targetIP net.IP, extraFlag string) *Device {
+	args := []string{"-r", "-p"}
+	if extraFlag != "" {
+		args = append(args, extraFlag)
+	}
+	args = append(args, serviceConnect)
+
+	cmd := exec.CommandContext(ctx, "avahi-browse", args...)
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		adbxlog.Info("discovery: scanForConnect StdoutPipe error", "err", err)
+		adbxlog.Info("discovery: avahiBrowseOnce StdoutPipe error", "err", err)
 		return nil
 	}
 	if err := cmd.Start(); err != nil {
-		adbxlog.Info("discovery: scanForConnect avahi-browse start error", "err", err)
+		adbxlog.Info("discovery: avahiBrowseOnce start error", "err", err)
 		return nil
 	}
 	defer cmd.Wait() //nolint:errcheck
 
-	scanner := bufio.NewScanner(stdout)
-	for scanner.Scan() {
-		line := scanner.Text()
-		adbxlog.Debug("discovery: scanForConnect avahi line", "raw", line)
+	sc := bufio.NewScanner(stdout)
+	for sc.Scan() {
+		line := sc.Text()
+		adbxlog.Debug("discovery: avahiBrowseOnce line", "raw", line, "flag", extraFlag)
 		dev, ok := parseAvahiLine(line, targetIP, DeviceConnect)
 		if !ok {
 			continue
 		}
-		adbxlog.Info("discovery: scanForConnect found device", "ip", dev.IP, "port", dev.Port)
 		return &dev
 	}
-	adbxlog.Info("discovery: scanForConnect timed out, no device found")
 	return nil
 }
 
