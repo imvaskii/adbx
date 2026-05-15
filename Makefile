@@ -10,8 +10,7 @@ GIT_COMMIT_VAR  := main.gitCommit
 REPO_VERSION    := $(shell git describe --tags --always 2>/dev/null || echo dev)
 GIT_HASH        := $(shell git rev-parse --short HEAD 2>/dev/null || echo unknown)
 
-# Semver tag helper — usage: make tag BUMP=patch|minor|major (default: patch)
-BUMP ?= patch
+# Semver tag helper — usage: make tag [patch|minor|major] (default: patch)
 
 # Build flags
 # Static linking (-extldflags=-static) only works for native Linux builds.
@@ -26,20 +25,39 @@ help: ## Show this help
 		awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}' | \
 		sort
 
-.PHONY: tag
-tag: ## Tag and push next release: make tag BUMP=patch|minor|major (default: patch)
-	@last=$$(git describe --tags --abbrev=0 2>/dev/null || echo v0.0.0); \
+.PHONY: tag patch minor major
+tag: ## Bump and push semver tag: make tag [patch|minor|major] (default: patch)
+	@bump=$(or $(filter patch minor major, $(MAKECMDGOALS)), patch); \
+	last=$$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$$' | head -1); \
+	last=$${last:-v0.0.0}; \
 	major=$$(echo $$last | sed 's/v\([0-9]*\)\..*/\1/'); \
 	minor=$$(echo $$last | sed 's/v[0-9]*\.\([0-9]*\)\..*/\1/'); \
 	patch=$$(echo $$last | sed 's/v[0-9]*\.[0-9]*\.\([0-9]*\).*/\1/'); \
-	case "$(BUMP)" in \
+	case "$$bump" in \
 	  major) next="v$$((major+1)).0.0" ;; \
 	  minor) next="v$$major.$$((minor+1)).0" ;; \
 	  *)     next="v$$major.$$minor.$$((patch+1))" ;; \
 	esac; \
-	echo "Tagging $$next"; \
+	echo "Current: $$last  →  Next: $$next"; \
 	git tag $$next; \
 	git push origin $$next
+
+patch minor major:
+	@:
+
+.PHONY: tag-push
+tag-push: ## Push the latest local tag to origin
+	@latest=$$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$$' | head -1); \
+	if [ -n "$$latest" ]; then \
+	  if git ls-remote --tags origin | grep -q "$$latest"; then \
+	    echo "Tag $$latest already exists on origin"; \
+	  else \
+	    echo "Pushing tag $$latest to origin"; \
+	    git push origin "$$latest"; \
+	  fi; \
+	else \
+	  echo "No semver tags found locally"; \
+	fi
 
 .PHONY: build
 build: ## Build binary for the current platform
