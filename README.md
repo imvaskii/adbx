@@ -22,25 +22,46 @@ Android's Wireless Debugging requires knowing the device's IP and port, running 
 
 ## Install
 
-```sh
-# Recommended — builds from source, no Gatekeeper issues
-go install github.com/imvaskii/adbx@latest
+### Homebrew (macOS / Linux)
 
-# Or build locally
+```sh
+brew tap imvaskii/tap
+brew install adbx
+```
+
+### One-line installer (macOS / Linux)
+
+```sh
+curl -fsSL https://github.com/imvaskii/adbx/releases/latest/download/install.sh | sh
+```
+
+Detects your OS and architecture, downloads the right binary, and installs to a user-writable directory already in your `$PATH`. On macOS it also strips the quarantine attribute automatically.
+
+### From source
+
+```sh
+go install github.com/imvaskii/adbx@latest
+```
+
+Locally-built binaries are never quarantined by macOS.
+
+### Build locally
+
+```sh
 make install   # builds and copies to ~/.local/bin/adbx
 ```
 
-Pre-built binaries for Linux and macOS (arm64/amd64) are attached to each [release](https://github.com/imvaskii/adbx/releases).
+Pre-built binaries for Linux and macOS (arm64/amd64) are also attached to each [release](https://github.com/imvaskii/adbx/releases).
 
-### macOS: first run
+### macOS: first run (pre-built binary only)
 
-macOS quarantines binaries downloaded from the internet. If you see *"Apple could not verify adbx is free of malware"* or *"adbx is damaged"*, remove the quarantine attribute:
+If you download a binary directly and see *"Apple could not verify adbx is free of malware"*, remove the quarantine attribute:
 
 ```sh
 xattr -d com.apple.quarantine ./adbx
 ```
 
-Using `go install` (above) avoids this entirely — locally-built binaries are never quarantined.
+The Homebrew and one-line installer methods handle this automatically.
 
 ## Usage
 

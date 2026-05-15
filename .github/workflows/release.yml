@@ -89,6 +89,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build-linux, build-darwin]
     steps:
+      - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
         with:
           name: adbx-linux-amd64
@@ -111,4 +113,19 @@ jobs:
             bin/adbx-linux-amd64
             bin/adbx-darwin-amd64
             bin/adbx-darwin-arm64
+            install.sh
           generate_release_notes: true
+
+  bump-tap:
+    name: Bump Homebrew tap
+    runs-on: ubuntu-latest
+    needs: release
+    steps:
+      - uses: mislav/bump-homebrew-formula-action@v4
+        with:
+          formula-name: adbx
+          formula-path: Formula/adbx.rb
+          homebrew-tap: imvaskii/homebrew-tap
+          download-url: https://github.com/imvaskii/adbx/archive/refs/tags/${{ github.ref_name }}.tar.gz
+        env:
+          COMMITTER_TOKEN: ${{ secrets.COMMITTER_TOKEN }}
